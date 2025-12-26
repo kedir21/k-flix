@@ -180,7 +180,7 @@ const Player: React.FC<PlayerProps> = ({
             <iframe
               src={activeSource.url}
               className="w-full h-full border-0"
-              sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation allow-popups allow-presentation"
+              sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-presentation"
               allow="autoplay; fullscreen; encrypted-media; picture-in-picture; accelerometer; gyroscope"
               allowFullScreen
               referrerPolicy="origin"
