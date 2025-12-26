@@ -289,12 +289,6 @@ const Player: React.FC<PlayerProps> = ({
 
             <div className="flex items-center gap-6 pointer-events-auto">
               <div className="flex gap-4">
-                {episodes && currentEpisode && currentEpisode < episodes.length && (
-                  <button onClick={() => onEpisodeChange?.(currentEpisode + 1)} className="bg-white text-black px-8 py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all outline-none focus:ring shadow-2xl">Next Episode</button>
-                )}
-                <button onClick={toggleFullscreen} className="p-5 bg-black/60 backdrop-blur-3xl text-white/40 hover:text-white rounded-[1.5rem] border border-white/10 transition-colors outline-none shadow-2xl">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-                </button>
               </div>
             </div>
           </div>
