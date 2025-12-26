@@ -17,24 +17,24 @@ interface PlayerProps {
   onEpisodeChange?: (ep: number) => void;
 }
 
-const Player: React.FC<PlayerProps> = ({ 
+const Player: React.FC<PlayerProps> = ({
   initialSource,
   allSources = [],
-  title, 
-  onClose, 
-  id, 
-  type, 
-  episodes, 
-  currentEpisode, 
-  onEpisodeChange 
+  title,
+  onClose,
+  id,
+  type,
+  episodes,
+  currentEpisode,
+  onEpisodeChange
 }) => {
   const [activeSource, setActiveSource] = useState<VideoSource | null>(null);
   const [isResolving, setIsResolving] = useState(true);
   const [showHud, setShowHud] = useState(true);
   const [isSourceDropdownOpen, setIsSourceDropdownOpen] = useState(false);
-  
+
   // Playback State
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
@@ -68,9 +68,17 @@ const Player: React.FC<PlayerProps> = ({
       });
       hls.loadSource(url);
       hls.attachMedia(videoRef.current);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => videoRef.current?.play());
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        videoRef.current?.play().catch(() => setIsPlaying(false));
+      });
+    } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+      // Native HLS support (Safari/iOS)
+      videoRef.current.src = url;
+      videoRef.current.load();
+      videoRef.current.play().catch(() => setIsPlaying(false));
     } else {
       videoRef.current.src = url;
+      videoRef.current.play().catch(() => setIsPlaying(false));
     }
   };
 
@@ -95,7 +103,7 @@ const Player: React.FC<PlayerProps> = ({
         console.warn("Auto-fullscreen blocked.");
       }
     };
-    
+
     autoFullscreen();
     prepareStream(initialSource);
 
@@ -147,7 +155,7 @@ const Player: React.FC<PlayerProps> = ({
   const isNative = activeSource?.type === 'm3u8' || activeSource?.type === 'mp4';
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className="fixed inset-0 z-[1000] bg-black flex flex-col items-center justify-center overflow-hidden"
       onMouseMove={handleUserInteraction}
@@ -157,7 +165,7 @@ const Player: React.FC<PlayerProps> = ({
       <div className="w-full h-full relative z-[10]">
         {!isResolving && activeSource && (
           isNative ? (
-            <video 
+            <video
               ref={videoRef}
               className="w-full h-full"
               onTimeUpdate={() => setCurrentTime(videoRef.current?.currentTime || 0)}
@@ -165,13 +173,14 @@ const Player: React.FC<PlayerProps> = ({
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
               autoPlay
+              playsInline
               controls={false}
             />
           ) : (
-            <iframe 
-              src={activeSource.url} 
-              className="w-full h-full border-0" 
-              sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
+            <iframe
+              src={activeSource.url}
+              className="w-full h-full border-0"
+              sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation allow-popups allow-presentation"
               allow="autoplay; fullscreen; encrypted-media; picture-in-picture; accelerometer; gyroscope"
               allowFullScreen
               referrerPolicy="origin"
@@ -211,7 +220,7 @@ const Player: React.FC<PlayerProps> = ({
               <span className="text-[9px] font-black uppercase text-blue-300">Fast CDN Active</span>
             </div>
 
-            <button 
+            <button
               onClick={() => setIsSourceDropdownOpen(!isSourceDropdownOpen)}
               className="flex items-center gap-4 bg-black/60 backdrop-blur-3xl border border-white/10 px-6 py-4 rounded-[1.5rem] text-white hover:bg-white/10 transition-all outline-none focus:ring"
             >
@@ -265,14 +274,14 @@ const Player: React.FC<PlayerProps> = ({
               {isNative && (
                 <div className="flex items-center gap-4 bg-black/60 backdrop-blur-3xl p-2 rounded-[2.5rem] border border-white/10 shadow-2xl">
                   <button onClick={() => skip(-10)} className="p-4 text-white/50 hover:text-white transition-colors outline-none">
-                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M8.445 14.832A1 1 0 0010 14V6a1 1 0 00-1.555-.832l-6 4a1 1 0 000 1.664l6 4zM16.445 14.832A1 1 0 0018 14V6a1 1 0 00-1.555-.832l-6 4a1 1 0 000 1.664l6 4z"/></svg>
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M8.445 14.832A1 1 0 0010 14V6a1 1 0 00-1.555-.832l-6 4a1 1 0 000 1.664l6 4zM16.445 14.832A1 1 0 0018 14V6a1 1 0 00-1.555-.832l-6 4a1 1 0 000 1.664l6 4z" /></svg>
                   </button>
                   <button onClick={togglePlay} className="text-white hover:text-blue-500 transition-transform active:scale-90 outline-none">
                     {isPlaying ? <svg className="w-14 h-14" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                    : <svg className="w-14 h-14" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>}
+                      : <svg className="w-14 h-14" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" /></svg>}
                   </button>
                   <button onClick={() => skip(10)} className="p-4 text-white/50 hover:text-white transition-colors outline-none">
-                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M4.555 6.168A1 1 0 003 7v8a1 1 0 001.555.832l6-4a1 1 0 000-1.664l-6-4zM12.555 6.168A1 1 0 0011 7v8a1 1 0 001.555.832l6-4a1 1 0 000-1.664l-6-4z"/></svg>
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M4.555 6.168A1 1 0 003 7v8a1 1 0 001.555.832l6-4a1 1 0 000-1.664l-6-4zM12.555 6.168A1 1 0 0011 7v8a1 1 0 001.555.832l6-4a1 1 0 000-1.664l-6-4z" /></svg>
                   </button>
                 </div>
               )}
