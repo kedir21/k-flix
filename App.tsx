@@ -15,7 +15,7 @@ const App: React.FC = () => {
   const [popularMovies, setPopularMovies] = useState<Movie[]>([]);
   const [popularTV, setPopularTV] = useState<Movie[]>([]);
   const [watchlist, setWatchlist] = useState<Movie[]>([]);
-  
+
   // Search & Pagination state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Movie[]>([]);
@@ -40,7 +40,7 @@ const App: React.FC = () => {
   const [currentSeason, setCurrentSeason] = useState(1);
   const [currentEpisode, setCurrentEpisode] = useState(1);
   const [isSeasonDropdownOpen, setIsSeasonDropdownOpen] = useState(false);
-  
+
   const detailScrollRef = useRef<HTMLDivElement>(null);
 
   // Infinite Scroll Observer
@@ -168,7 +168,7 @@ const App: React.FC = () => {
   const startPlayback = (season?: number, episode?: number) => {
     if (season !== undefined) setCurrentSeason(season);
     if (episode !== undefined) setCurrentEpisode(episode);
-    const sources = extractorService.getSources(selectedMovie.id, selectedMovie.seasons ? 'tv' : 'movie', season || currentSeason, episode || currentEpisode);
+    const sources = extractorService.getSources(selectedMovie.id, selectedMovie.seasons ? 'tv' : 'movie', season || currentSeason, episode || currentEpisode, selectedMovie.external_ids?.imdb_id);
     setAllSources(sources);
     setActiveSource(sources[0]);
     setIsPlayerOpen(true);
@@ -225,77 +225,77 @@ const App: React.FC = () => {
         )}
 
         {(activeTab === 'movies' || activeTab === 'tv' || activeTab === 'search') && (
-           <div className="p-6 md:p-10">
-             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
-               <h1 className="text-3xl md:text-5xl font-black tracking-tighter italic uppercase">{activeTab === 'search' ? 'Search' : activeTab}</h1>
-               {(activeTab === 'movies' || activeTab === 'tv') && (
-                 <div className="relative w-full sm:w-auto">
-                   <button onClick={() => setIsGenreMenuOpen(!isGenreMenuOpen)} className="w-full sm:w-auto flex items-center justify-between gap-3 bg-white/5 border border-white/10 px-5 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">
-                     {selectedGenre ? (activeTab === 'movies' ? movieGenres : tvGenres).find(g => g.id === selectedGenre)?.name : 'Filter By Genre'}
-                     <svg className={`w-4 h-4 transition-transform ${isGenreMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" strokeWidth={3} /></svg>
-                   </button>
-                   {isGenreMenuOpen && (
-                     <div className="absolute right-0 top-full mt-3 w-full sm:w-56 bg-[#0a0a0a] border border-white/10 rounded-3xl shadow-2xl z-[500] max-h-80 overflow-y-auto no-scrollbar p-2">
-                       <button onClick={() => { setSelectedGenre(null); setIsGenreMenuOpen(false); }} className="w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 rounded-xl transition-colors">All Genres</button>
-                       {(activeTab === 'movies' ? movieGenres : tvGenres).map(g => (
-                         <button key={g.id} onClick={() => { setSelectedGenre(g.id); setIsGenreMenuOpen(false); }} className="w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 rounded-xl transition-colors">{g.name}</button>
-                       ))}
-                     </div>
-                   )}
-                 </div>
-               )}
-             </div>
+          <div className="p-6 md:p-10">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+              <h1 className="text-3xl md:text-5xl font-black tracking-tighter italic uppercase">{activeTab === 'search' ? 'Search' : activeTab}</h1>
+              {(activeTab === 'movies' || activeTab === 'tv') && (
+                <div className="relative w-full sm:w-auto">
+                  <button onClick={() => setIsGenreMenuOpen(!isGenreMenuOpen)} className="w-full sm:w-auto flex items-center justify-between gap-3 bg-white/5 border border-white/10 px-5 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">
+                    {selectedGenre ? (activeTab === 'movies' ? movieGenres : tvGenres).find(g => g.id === selectedGenre)?.name : 'Filter By Genre'}
+                    <svg className={`w-4 h-4 transition-transform ${isGenreMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" strokeWidth={3} /></svg>
+                  </button>
+                  {isGenreMenuOpen && (
+                    <div className="absolute right-0 top-full mt-3 w-full sm:w-56 bg-[#0a0a0a] border border-white/10 rounded-3xl shadow-2xl z-[500] max-h-80 overflow-y-auto no-scrollbar p-2">
+                      <button onClick={() => { setSelectedGenre(null); setIsGenreMenuOpen(false); }} className="w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 rounded-xl transition-colors">All Genres</button>
+                      {(activeTab === 'movies' ? movieGenres : tvGenres).map(g => (
+                        <button key={g.id} onClick={() => { setSelectedGenre(g.id); setIsGenreMenuOpen(false); }} className="w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 rounded-xl transition-colors">{g.name}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
-             {activeTab === 'search' && (
-               <form onSubmit={handleSearch} className="mb-12">
-                 <div className="relative group">
-                   <input type="text" placeholder="Movies, TV Shows..." className="w-full bg-[#0a0a0a] border-2 border-white/5 focus:border-blue-600 rounded-3xl py-5 px-8 sm:py-6 sm:px-10 text-lg sm:text-xl outline-none font-black transition-all placeholder:text-gray-800" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus />
-                   <button type="submit" className="absolute right-3 top-1/2 -translate-y-1/2 bg-blue-600 p-3.5 sm:p-4 rounded-2xl shadow-xl shadow-blue-600/20 active:scale-95 transition-transform"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeWidth={3}/></svg></button>
-                 </div>
-               </form>
-             )}
+            {activeTab === 'search' && (
+              <form onSubmit={handleSearch} className="mb-12">
+                <div className="relative group">
+                  <input type="text" placeholder="Movies, TV Shows..." className="w-full bg-[#0a0a0a] border-2 border-white/5 focus:border-blue-600 rounded-3xl py-5 px-8 sm:py-6 sm:px-10 text-lg sm:text-xl outline-none font-black transition-all placeholder:text-gray-800" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} autoFocus />
+                  <button type="submit" className="absolute right-3 top-1/2 -translate-y-1/2 bg-blue-600 p-3.5 sm:p-4 rounded-2xl shadow-xl shadow-blue-600/20 active:scale-95 transition-transform"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeWidth={3} /></svg></button>
+                </div>
+              </form>
+            )}
 
-             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6 md:gap-8">
-               {(activeTab === 'movies' ? popularMovies : activeTab === 'tv' ? popularTV : searchResults).map((movie, idx) => {
-                 const list = activeTab === 'movies' ? popularMovies : activeTab === 'tv' ? popularTV : searchResults;
-                 const isLast = list.length === idx + 1;
-                 return (
-                   <button key={`${movie.id}-${idx}`} ref={isLast ? lastElementRef : null} onClick={() => openDetails(movie)} className="group flex flex-col gap-3 outline-none">
-                      <div className="relative aspect-[2/3] rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden border border-white/5 bg-[#050505] shadow-2xl">
-                        <img src={movie.poster_path ? `${IMAGE_BASE_URL}/w500${movie.poster_path}` : 'https://picsum.photos/400/600?grayscale'} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" loading="lazy" />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-xl scale-50 group-hover:scale-100 transition-transform"><svg className="w-5 h-5 sm:w-6 sm:h-6 ml-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"/></svg></div>
-                        </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6 md:gap-8">
+              {(activeTab === 'movies' ? popularMovies : activeTab === 'tv' ? popularTV : searchResults).map((movie, idx) => {
+                const list = activeTab === 'movies' ? popularMovies : activeTab === 'tv' ? popularTV : searchResults;
+                const isLast = list.length === idx + 1;
+                return (
+                  <button key={`${movie.id}-${idx}`} ref={isLast ? lastElementRef : null} onClick={() => openDetails(movie)} className="group flex flex-col gap-3 outline-none">
+                    <div className="relative aspect-[2/3] rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden border border-white/5 bg-[#050505] shadow-2xl">
+                      <img src={movie.poster_path ? `${IMAGE_BASE_URL}/w500${movie.poster_path}` : 'https://picsum.photos/400/600?grayscale'} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" loading="lazy" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-xl scale-50 group-hover:scale-100 transition-transform"><svg className="w-5 h-5 sm:w-6 sm:h-6 ml-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg></div>
                       </div>
-                      <span className="text-[10px] sm:text-[11px] font-black truncate uppercase text-white/50 group-hover:text-blue-500 tracking-tighter transition-colors">{movie.title || movie.name}</span>
-                   </button>
-                 );
-               })}
-             </div>
-             {loadingMore && <div className="py-20 flex justify-center"><div className="w-10 h-10 border-4 border-white/5 border-t-blue-500 rounded-full animate-spin" /></div>}
-           </div>
+                    </div>
+                    <span className="text-[10px] sm:text-[11px] font-black truncate uppercase text-white/50 group-hover:text-blue-500 tracking-tighter transition-colors">{movie.title || movie.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {loadingMore && <div className="py-20 flex justify-center"><div className="w-10 h-10 border-4 border-white/5 border-t-blue-500 rounded-full animate-spin" /></div>}
+          </div>
         )}
 
         {activeTab === 'watchlist' && (
           <div className="p-6 md:p-10">
-             <h1 className="text-3xl md:text-4xl font-black tracking-tighter italic uppercase mb-12">My Collection</h1>
-             {watchlist.length === 0 ? (
-               <div className="flex flex-col items-center justify-center py-40 opacity-20">
-                 <svg className="w-20 h-20 mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" strokeWidth={2}/></svg>
-                 <p className="text-xs font-black uppercase tracking-[0.4em]">Collection is empty</p>
-               </div>
-             ) : (
-               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-8">
-                 {watchlist.map((movie) => (
-                   <button key={movie.id} onClick={() => openDetails(movie)} className="group flex flex-col gap-3 outline-none animate-in zoom-in-95 duration-300">
-                     <div className="relative aspect-[2/3] rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden border border-white/5 bg-[#050505]">
-                       <img src={movie.poster_path ? `${IMAGE_BASE_URL}/w500${movie.poster_path}` : 'https://picsum.photos/400/600'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                     </div>
-                     <span className="text-[10px] sm:text-[11px] font-black truncate uppercase text-white/50 tracking-tighter">{movie.title || movie.name}</span>
-                   </button>
-                 ))}
-               </div>
-             )}
+            <h1 className="text-3xl md:text-4xl font-black tracking-tighter italic uppercase mb-12">My Collection</h1>
+            {watchlist.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-40 opacity-20">
+                <svg className="w-20 h-20 mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" strokeWidth={2} /></svg>
+                <p className="text-xs font-black uppercase tracking-[0.4em]">Collection is empty</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-8">
+                {watchlist.map((movie) => (
+                  <button key={movie.id} onClick={() => openDetails(movie)} className="group flex flex-col gap-3 outline-none animate-in zoom-in-95 duration-300">
+                    <div className="relative aspect-[2/3] rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden border border-white/5 bg-[#050505]">
+                      <img src={movie.poster_path ? `${IMAGE_BASE_URL}/w500${movie.poster_path}` : 'https://picsum.photos/400/600'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                    </div>
+                    <span className="text-[10px] sm:text-[11px] font-black truncate uppercase text-white/50 tracking-tighter">{movie.title || movie.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -322,25 +322,25 @@ const App: React.FC = () => {
                   <img src={`${IMAGE_BASE_URL}/w500${selectedMovie.poster_path}`} className="w-full h-full object-cover" />
                 </div>
                 <div className="flex-1 space-y-3 sm:space-y-4">
-                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                     <span className="text-blue-500 font-black text-[9px] sm:text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em] bg-blue-600/10 border border-blue-500/20 px-3 py-1 rounded-full">{selectedMovie.vote_average?.toFixed(1)} Rating</span>
-                     <span className="text-gray-500 text-[9px] sm:text-xs font-black uppercase tracking-widest">{selectedMovie.release_date?.split('-')[0] || selectedMovie.first_air_date?.split('-')[0]}</span>
-                     <span className="px-2 py-0.5 border border-white/20 rounded text-[8px] font-black text-gray-500 uppercase">4K UHD</span>
-                   </div>
-                   <h1 className="text-3xl sm:text-5xl md:text-8xl font-black leading-[0.9] tracking-tighter uppercase italic drop-shadow-2xl">{selectedMovie.title || selectedMovie.name}</h1>
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <span className="text-blue-500 font-black text-[9px] sm:text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em] bg-blue-600/10 border border-blue-500/20 px-3 py-1 rounded-full">{selectedMovie.vote_average?.toFixed(1)} Rating</span>
+                    <span className="text-gray-500 text-[9px] sm:text-xs font-black uppercase tracking-widest">{selectedMovie.release_date?.split('-')[0] || selectedMovie.first_air_date?.split('-')[0]}</span>
+                    <span className="px-2 py-0.5 border border-white/20 rounded text-[8px] font-black text-gray-500 uppercase">4K UHD</span>
+                  </div>
+                  <h1 className="text-3xl sm:text-5xl md:text-8xl font-black leading-[0.9] tracking-tighter uppercase italic drop-shadow-2xl">{selectedMovie.title || selectedMovie.name}</h1>
                 </div>
               </div>
 
               {/* Action Buttons - Stacked on Mobile */}
               <div className="flex flex-col sm:flex-row gap-4">
-                 <button onClick={() => startPlayback()} className="flex-1 min-w-[140px] bg-white text-black hover:bg-blue-600 hover:text-white py-5 sm:py-6 rounded-[1.5rem] sm:rounded-[2rem] font-black text-xs sm:text-sm uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 outline-none">
-                   <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"/></svg>
-                   Play Now
-                 </button>
-                 <button onClick={() => toggleWatchlist(selectedMovie)} className={`p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] transition-all border outline-none active:scale-90 flex items-center justify-center gap-3 ${isInWatchlist(selectedMovie.id) ? 'bg-blue-600 text-white border-blue-500 shadow-xl' : 'bg-white/5 text-white border-white/10'}`}>
-                    <svg className="w-6 h-6 sm:w-7 sm:h-7" fill={isInWatchlist(selectedMovie.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
-                    <span className="font-black text-[10px] sm:text-xs uppercase tracking-widest block">{isInWatchlist(selectedMovie.id) ? 'Saved' : 'Add to List'}</span>
-                 </button>
+                <button onClick={() => startPlayback()} className="flex-1 min-w-[140px] bg-white text-black hover:bg-blue-600 hover:text-white py-5 sm:py-6 rounded-[1.5rem] sm:rounded-[2rem] font-black text-xs sm:text-sm uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 outline-none">
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
+                  Play Now
+                </button>
+                <button onClick={() => toggleWatchlist(selectedMovie)} className={`p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] transition-all border outline-none active:scale-90 flex items-center justify-center gap-3 ${isInWatchlist(selectedMovie.id) ? 'bg-blue-600 text-white border-blue-500 shadow-xl' : 'bg-white/5 text-white border-white/10'}`}>
+                  <svg className="w-6 h-6 sm:w-7 sm:h-7" fill={isInWatchlist(selectedMovie.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
+                  <span className="font-black text-[10px] sm:text-xs uppercase tracking-widest block">{isInWatchlist(selectedMovie.id) ? 'Saved' : 'Add to List'}</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
@@ -349,7 +349,7 @@ const App: React.FC = () => {
                     <h3 className="text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] text-blue-500/60 italic">Synopsis</h3>
                     <p className="text-gray-400 leading-relaxed text-sm sm:text-lg font-medium max-w-3xl">{selectedMovie.overview}</p>
                   </div>
-                  
+
                   {selectedMovie.credits?.cast && (
                     <div className="space-y-4">
                       <h3 className="text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] text-blue-500/60 italic">The Cast</h3>
@@ -420,7 +420,7 @@ const App: React.FC = () => {
                         <div className="w-full sm:w-40 md:w-48 aspect-video rounded-xl sm:rounded-3xl overflow-hidden relative flex-shrink-0 bg-black shadow-2xl">
                           <img src={ep.still_path ? `${IMAGE_BASE_URL}/w500${ep.still_path}` : `${IMAGE_BASE_URL}/original${selectedMovie.backdrop_path}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                           <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-full flex items-center justify-center text-black shadow-xl"><svg className="w-4 h-4 sm:w-5 sm:h-5 ml-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"/></svg></div>
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-full flex items-center justify-center text-black shadow-xl"><svg className="w-4 h-4 sm:w-5 sm:h-5 ml-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg></div>
                           </div>
                         </div>
                         <div className="flex-1 min-w-0 flex flex-col justify-center gap-1 sm:gap-2">
@@ -438,7 +438,7 @@ const App: React.FC = () => {
       )}
 
       {isSourceSelectorOpen && selectedMovie && (
-        <SourceSelector id={selectedMovie.id} type={selectedMovie.seasons ? 'tv' : 'movie'} season={currentSeason} episode={currentEpisode} onSelect={handleSourceSelect} onClose={() => setIsSourceSelectorOpen(false)} />
+        <SourceSelector id={selectedMovie.id} type={selectedMovie.seasons ? 'tv' : 'movie'} season={currentSeason} episode={currentEpisode} imdbId={selectedMovie.external_ids?.imdb_id} onSelect={handleSourceSelect} onClose={() => setIsSourceSelectorOpen(false)} />
       )}
 
       {isPlayerOpen && activeSource && (

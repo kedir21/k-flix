@@ -10,10 +10,11 @@ interface SourceSelectorProps {
   type: 'movie' | 'tv';
   season?: number;
   episode?: number;
+  imdbId?: string;
 }
 
-const SourceSelector: React.FC<SourceSelectorProps> = ({ onSelect, onClose, id, type, season, episode }) => {
-  const sources = extractorService.getSources(id, type, season, episode);
+const SourceSelector: React.FC<SourceSelectorProps> = ({ onSelect, onClose, id, type, season, episode, imdbId }) => {
+  const sources = extractorService.getSources(id, type, season, episode, imdbId);
 
   return (
     <div className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-6 animate-in fade-in duration-300">
@@ -26,7 +27,7 @@ const SourceSelector: React.FC<SourceSelectorProps> = ({ onSelect, onClose, id, 
             <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
-        
+
         <div className="grid grid-cols-1 gap-4">
           {sources.map((source, index) => (
             <button

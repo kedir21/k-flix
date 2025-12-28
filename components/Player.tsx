@@ -115,7 +115,30 @@ const Player: React.FC<PlayerProps> = ({
       if (e.code === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
+
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        if (typeof event.data === 'string') {
+          const data = JSON.parse(event.data);
+          if (data && data.type === 'PLAYER_EVENT') {
+            console.log("VidKing Player Event:", data.data);
+            // Here we could update state or local storage with progress
+            if (data.data.event === 'timeupdate') {
+              setCurrentTime(data.data.currentTime);
+              setDuration(data.data.duration);
+            }
+          }
+        }
+      } catch (e) {
+        // Ignore non-JSON messages
+      }
+    };
+    window.addEventListener('message', handleMessage);
+
+    return () => {
+      window.removeEventListener('keydown', handleKey);
+      window.removeEventListener('message', handleMessage);
+    };
   }, [initialSource]);
 
   const togglePlay = () => {

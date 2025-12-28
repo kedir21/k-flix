@@ -10,7 +10,7 @@ export const tmdbService = {
   },
 
   async fetchPopularMovies(page: number = 1, genreId?: number): Promise<Movie[]> {
-    const url = genreId 
+    const url = genreId
       ? `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&page=${page}&with_genres=${genreId}&sort_by=popularity.desc`
       : `${TMDB_BASE_URL}/movie/popular?api_key=${TMDB_API_KEY}&page=${page}`;
     const res = await fetch(url);
@@ -19,7 +19,7 @@ export const tmdbService = {
   },
 
   async fetchPopularTV(page: number = 1, genreId?: number): Promise<Movie[]> {
-    const url = genreId 
+    const url = genreId
       ? `${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&page=${page}&with_genres=${genreId}&sort_by=popularity.desc`
       : `${TMDB_BASE_URL}/tv/popular?api_key=${TMDB_API_KEY}&page=${page}`;
     const res = await fetch(url);
@@ -34,7 +34,7 @@ export const tmdbService = {
   },
 
   async fetchDetails(id: number, type: 'movie' | 'tv'): Promise<any> {
-    const res = await fetch(`${TMDB_BASE_URL}/${type}/${id}?api_key=${TMDB_API_KEY}&append_to_response=credits,recommendations`);
+    const res = await fetch(`${TMDB_BASE_URL}/${type}/${id}?api_key=${TMDB_API_KEY}&append_to_response=credits,recommendations,external_ids`);
     return await res.json();
   },
 
