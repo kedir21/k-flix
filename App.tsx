@@ -77,7 +77,7 @@ const App: React.FC = () => {
 
   const isInWatchlist = (id: number) => watchlist.some(m => m.id === id);
 
-  // Load initial data
+  // Load initial data & URL state
   useEffect(() => {
     const init = async () => {
       try {
@@ -89,9 +89,56 @@ const App: React.FC = () => {
         setTrending(t);
         setMovieGenres(mg);
         setTvGenres(tg);
+
+        // Check URL parameters for direct link
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('id');
+        const type = params.get('type') as 'movie' | 'tv';
+
+        if (id && type) {
+          const details = await tmdbService.fetchDetails(parseInt(id), type);
+          setSelectedMovie(details);
+          setIsDetailOpen(true);
+          if (type === 'tv') {
+            const episodes = await tmdbService.fetchSeasons(parseInt(id), 1);
+            setSeasonsData(episodes || []);
+            setCurrentSeason(1);
+            setCurrentEpisode(1);
+          }
+        }
       } catch (err) { console.error(err); }
     };
     init();
+
+    // Handle browser back/forward buttons
+    const handlePopState = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get('id');
+      const type = params.get('type') as 'movie' | 'tv';
+
+      if (id && type) {
+        // Re-open if navigating forward to a state with ID
+        if (!selectedMovie || selectedMovie.id !== parseInt(id)) {
+          const details = await tmdbService.fetchDetails(parseInt(id), type);
+          setSelectedMovie(details);
+          setIsDetailOpen(true);
+          if (type === 'tv') {
+            const episodes = await tmdbService.fetchSeasons(parseInt(id), 1);
+            setSeasonsData(episodes || []);
+            setCurrentSeason(1);
+            setCurrentEpisode(1);
+          }
+        } else {
+          setIsDetailOpen(true);
+        }
+      } else {
+        // Close if navigating back to home state
+        setIsDetailOpen(false);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   // Fetch categorized data
@@ -152,6 +199,13 @@ const App: React.FC = () => {
   const openDetails = async (movie: Movie) => {
     try {
       const type = movie.media_type || (movie.name ? 'tv' : 'movie');
+
+      // Update URL without reloading
+      const url = new URL(window.location.href);
+      url.searchParams.set('id', movie.id.toString());
+      url.searchParams.set('type', type);
+      window.history.pushState({}, '', url);
+
       const details = await tmdbService.fetchDetails(movie.id, type);
       setSelectedMovie(details);
       setIsDetailOpen(true);
@@ -197,7 +251,13 @@ const App: React.FC = () => {
     setActiveTab(tab);
     setHasMore(true);
     setSelectedGenre(null);
-    setIsDetailOpen(false); // Close details when navigating away
+    if (isDetailOpen) {
+      setIsDetailOpen(false);
+      const url = new URL(window.location.href);
+      url.searchParams.delete('id');
+      url.searchParams.delete('type');
+      window.history.pushState({}, '', url);
+    }
   };
 
   return (
@@ -301,11 +361,20 @@ const App: React.FC = () => {
       </div>
 
       {isDetailOpen && selectedMovie && (
-        <div ref={detailScrollRef} className="fixed inset-0 z-[100] overflow-y-auto bg-[#050505] animate-in fade-in slide-in-from-bottom-10 duration-700 no-scrollbar pb-32">
+        <div ref={detailScrollRef} className="fixed inset-0 z-[100] overflow-y-auto overflow-x-hidden bg-[#050505] animate-in fade-in slide-in-from-bottom-10 duration-700 no-scrollbar pb-32">
           <div className="w-full min-h-screen relative">
             {/* Close Button Mobile Optimized */}
             <div className="absolute top-6 left-6 z-[120]">
-              <button onClick={() => setIsDetailOpen(false)} className="p-3 sm:p-4 bg-black/60 text-white rounded-2xl sm:rounded-3xl backdrop-blur-3xl border border-white/10 hover:bg-white hover:text-black transition-all active:scale-90 shadow-2xl">
+              <button
+                onClick={() => {
+                  setIsDetailOpen(false);
+                  const url = new URL(window.location.href);
+                  url.searchParams.delete('id');
+                  url.searchParams.delete('type');
+                  window.history.pushState({}, '', url);
+                }}
+                className="p-3 sm:p-4 bg-black/60 text-white rounded-2xl sm:rounded-3xl backdrop-blur-3xl border border-white/10 hover:bg-white hover:text-black transition-all active:scale-90 shadow-2xl"
+              >
                 <svg className="w-6 h-6 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
               </button>
             </div>
@@ -336,47 +405,6 @@ const App: React.FC = () => {
                 <button onClick={() => startPlayback()} className="flex-1 min-w-[140px] bg-white text-black hover:bg-blue-600 hover:text-white py-5 sm:py-6 rounded-[1.5rem] sm:rounded-[2rem] font-black text-xs sm:text-sm uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 outline-none">
                   <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
                   Play Now
-                </button>
-                <button
-                  onClick={async () => {
-                    const type = selectedMovie.seasons ? 'tv' : 'movie';
-                    const id = selectedMovie.id;
-                    const season = selectedMovie.seasons ? currentSeason : undefined;
-                    const episode = selectedMovie.seasons ? currentEpisode : undefined;
-
-                    try {
-                      // Attempt to fetch from Rive API
-                      const apiUrl = `https://rivestream.org/api/backend/fetch?postId=${id}&type=${type}${season ? `&season=${season}` : ''}${episode ? `&episode=${episode}` : ''}`;
-                      const response = await fetch(apiUrl);
-                      const data = await response.json();
-
-                      if (data.data && data.data.downloads) {
-                        const links = data.data.downloads.map((d: any) => `${d.label}: ${d.url}`).join('\n');
-                        if (links) {
-                          window.open(data.data.downloads[0].url, '_blank');
-                        } else {
-                          alert('No download links found.');
-                        }
-                      } else {
-                        // Fallback to generic Rive embed which might have download
-                        const url = type === 'movie'
-                          ? `https://rivestream.org/embed?type=movie&id=${id}`
-                          : `https://rivestream.org/embed?type=tv&id=${id}&season=${season}&episode=${episode}`;
-                        window.open(url, '_blank');
-                      }
-                    } catch (e) {
-                      console.error("Download fetch failed", e);
-                      // Fallback
-                      const url = type === 'movie'
-                        ? `https://rivestream.org/embed?type=movie&id=${id}`
-                        : `https://rivestream.org/embed?type=tv&id=${id}&season=${season}&episode=${episode}`;
-                      window.open(url, '_blank');
-                    }
-                  }}
-                  className="p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] transition-all border outline-none active:scale-90 flex items-center justify-center gap-3 bg-white/5 text-white border-white/10 hover:bg-white hover:text-black"
-                >
-                  <svg className="w-6 h-6 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                  <span className="font-black text-[10px] sm:text-xs uppercase tracking-widest block">Download</span>
                 </button>
                 <button onClick={() => toggleWatchlist(selectedMovie)} className={`p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] transition-all border outline-none active:scale-90 flex items-center justify-center gap-3 ${isInWatchlist(selectedMovie.id) ? 'bg-blue-600 text-white border-blue-500 shadow-xl' : 'bg-white/5 text-white border-white/10'}`}>
                   <svg className="w-6 h-6 sm:w-7 sm:h-7" fill={isInWatchlist(selectedMovie.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>

@@ -20,7 +20,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, setActiveTab }) =>
   return (
     <div className="flex h-screen bg-[#050505] text-white overflow-hidden font-inter flex-col">
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto bg-black scroll-smooth relative no-scrollbar">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden bg-black scroll-smooth relative no-scrollbar">
         <div className="max-w-[1440px] mx-auto min-h-full bg-gradient-to-b from-[#0a0a0a] to-[#050505] relative pb-24">
           {children}
         </div>

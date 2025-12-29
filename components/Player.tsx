@@ -226,7 +226,7 @@ const Player: React.FC<PlayerProps> = ({
         <div className="flex justify-between items-start pointer-events-none">
           <div className="flex gap-6 items-center pointer-events-auto">
             <button onClick={onClose} className="p-4 bg-black/60 hover:bg-white text-white hover:text-black rounded-[1.5rem] transition-all border border-white/10 outline-none focus:ring">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
             </button>
             <div className="bg-black/40 backdrop-blur-md px-6 py-3 rounded-[2rem] border border-white/10">
               <h2 className="text-2xl font-black text-white leading-tight tracking-tight">{title}</h2>
