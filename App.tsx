@@ -337,6 +337,47 @@ const App: React.FC = () => {
                   <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
                   Play Now
                 </button>
+                <button
+                  onClick={async () => {
+                    const type = selectedMovie.seasons ? 'tv' : 'movie';
+                    const id = selectedMovie.id;
+                    const season = selectedMovie.seasons ? currentSeason : undefined;
+                    const episode = selectedMovie.seasons ? currentEpisode : undefined;
+
+                    try {
+                      // Attempt to fetch from Rive API
+                      const apiUrl = `https://rivestream.org/api/backend/fetch?postId=${id}&type=${type}${season ? `&season=${season}` : ''}${episode ? `&episode=${episode}` : ''}`;
+                      const response = await fetch(apiUrl);
+                      const data = await response.json();
+
+                      if (data.data && data.data.downloads) {
+                        const links = data.data.downloads.map((d: any) => `${d.label}: ${d.url}`).join('\n');
+                        if (links) {
+                          window.open(data.data.downloads[0].url, '_blank');
+                        } else {
+                          alert('No download links found.');
+                        }
+                      } else {
+                        // Fallback to generic Rive embed which might have download
+                        const url = type === 'movie'
+                          ? `https://rivestream.org/embed?type=movie&id=${id}`
+                          : `https://rivestream.org/embed?type=tv&id=${id}&season=${season}&episode=${episode}`;
+                        window.open(url, '_blank');
+                      }
+                    } catch (e) {
+                      console.error("Download fetch failed", e);
+                      // Fallback
+                      const url = type === 'movie'
+                        ? `https://rivestream.org/embed?type=movie&id=${id}`
+                        : `https://rivestream.org/embed?type=tv&id=${id}&season=${season}&episode=${episode}`;
+                      window.open(url, '_blank');
+                    }
+                  }}
+                  className="p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] transition-all border outline-none active:scale-90 flex items-center justify-center gap-3 bg-white/5 text-white border-white/10 hover:bg-white hover:text-black"
+                >
+                  <svg className="w-6 h-6 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                  <span className="font-black text-[10px] sm:text-xs uppercase tracking-widest block">Download</span>
+                </button>
                 <button onClick={() => toggleWatchlist(selectedMovie)} className={`p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] transition-all border outline-none active:scale-90 flex items-center justify-center gap-3 ${isInWatchlist(selectedMovie.id) ? 'bg-blue-600 text-white border-blue-500 shadow-xl' : 'bg-white/5 text-white border-white/10'}`}>
                   <svg className="w-6 h-6 sm:w-7 sm:h-7" fill={isInWatchlist(selectedMovie.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
                   <span className="font-black text-[10px] sm:text-xs uppercase tracking-widest block">{isInWatchlist(selectedMovie.id) ? 'Saved' : 'Add to List'}</span>
@@ -430,6 +471,13 @@ const App: React.FC = () => {
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Recommendations Section */}
+              {selectedMovie.recommendations?.results?.length > 0 && (
+                <div className="mt-8 sm:mt-12 -mx-6 sm:-mx-8 md:-mx-16">
+                  <Row title="You Might Also Like" items={selectedMovie.recommendations.results} onItemClick={openDetails} />
                 </div>
               )}
             </div>
