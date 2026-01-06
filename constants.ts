@@ -7,14 +7,14 @@ export const VIDEO_PROVIDERS = [
   {
     id: 'vidsrccc',
     name: 'VidSrc.CC',
-    movie: (id: number) => `https://vidsrc.cc/v2/embed/movie/${id}?autoPlay=true`,
-    tv: (id: number, s: number, e: number) => `https://vidsrc.cc/v2/embed/tv/${id}/${s}/${e}?autoPlay=true`,
+    movie: (id: number) => `https://vidsrc.cc/v3/embed/movie/${id}?autoPlay=true`,
+    tv: (id: number, s: number, e: number) => `https://vidsrc.cc/v3/embed/tv/${id}/${s}/${e}?autoPlay=true`,
   },
   {
     id: 'rive',
     name: 'Rive',
-    movie: (id: number) => `https://rivestream.org/embed?type=movie&id=${id}&autoplay=1`,
-    tv: (id: number, s: number, e: number) => `https://rivestream.org/embed?type=tv&id=${id}&season=${s}&episode=${e}&autoplay=1`,
+    movie: (id: number) => `https://rivestream.org/embed?type=movie&id=${id}&autoplay=1&autoPlay=true`,
+    tv: (id: number, s: number, e: number) => `https://rivestream.org/embed?type=tv&id=${id}&season=${s}&episode=${e}&autoplay=1&autoPlay=true`,
   },
   {
     id: 'vidking',

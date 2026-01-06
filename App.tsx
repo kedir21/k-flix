@@ -1,9 +1,12 @@
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Layout from './components/Layout';
 import Row from './components/Row';
 import Player from './components/Player';
 import SourceSelector from './components/SourceSelector';
+import Auth from './components/Auth';
+import { supabase } from './services/supabaseClient';
+import { userService } from './services/userService';
 import { tmdbService } from './services/tmdbService';
 import { extractorService } from './services/extractorService';
 import { Movie, Episode, VideoSource, Genre, Cast } from './types';
@@ -41,6 +44,10 @@ const App: React.FC = () => {
   const [currentEpisode, setCurrentEpisode] = useState(1);
   const [isSeasonDropdownOpen, setIsSeasonDropdownOpen] = useState(false);
 
+  // Auth & Profile state
+  const [user, setUser] = useState<any>(null);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+
   const detailScrollRef = useRef<HTMLDivElement>(null);
 
   // Infinite Scroll Observer
@@ -57,27 +64,80 @@ const App: React.FC = () => {
   }, [loadingMore, hasMore, activeTab]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('onstream_watchlist');
-    if (saved) {
-      try { setWatchlist(JSON.parse(saved)); } catch (e) { console.error(e); }
-    }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) fetchUserData(session.user.id);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchUserData(session.user.id);
+      } else {
+        setWatchlist([]);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const toggleWatchlist = (movie: Movie) => {
-    const isStored = watchlist.find(m => m.id === movie.id);
-    let updated;
-    if (isStored) {
-      updated = watchlist.filter(m => m.id !== movie.id);
-    } else {
-      updated = [{ ...movie, media_type: movie.media_type || (movie.name ? 'tv' : 'movie') }, ...watchlist];
+  const fetchUserData = async (userId: string) => {
+    try {
+      const watchlistData = await userService.getWatchlist(userId);
+      setWatchlist(watchlistData.map((w: any) => w.content_data));
+    } catch (e) {
+      console.error('Error fetching user data:', e);
     }
-    setWatchlist(updated);
-    localStorage.setItem('onstream_watchlist', JSON.stringify(updated));
+  };
+
+  useEffect(() => {
+    if (!user) {
+      const saved = localStorage.getItem('onstream_watchlist');
+      if (saved) {
+        try { setWatchlist(JSON.parse(saved)); } catch (e) { console.error(e); }
+      }
+    }
+  }, [user]);
+
+  const toggleWatchlist = async (movie: Movie) => {
+    // Ensure we have a valid media type
+    const media_type = movie.media_type || (movie.name ? 'tv' : 'movie');
+    const movieWithMg = { ...movie, media_type };
+
+    if (!user) {
+      const isStored = watchlist.find(m => m.id === movie.id);
+      let updated;
+      if (isStored) {
+        updated = watchlist.filter(m => m.id !== movie.id);
+      } else {
+        updated = [movieWithMg, ...watchlist];
+      }
+      setWatchlist(updated);
+      localStorage.setItem('onstream_watchlist', JSON.stringify(updated));
+      return;
+    }
+
+    try {
+      const isStored = watchlist.find(m => m.id === movie.id);
+      if (isStored) {
+        await userService.removeFromWatchlist(user.id, movie.id);
+        setWatchlist(prev => prev.filter(m => m.id !== movie.id));
+      } else {
+        await userService.addToWatchlist(user.id, movieWithMg);
+        setWatchlist(prev => [movieWithMg, ...prev]);
+      }
+    } catch (e: any) {
+      console.error('Watchlist toggle failed:', e);
+      if (e.message?.includes('relation "watchlist" does not exist')) {
+        alert('❌ Database Table Missing!\n\nPlease go to your Profile tab and copy the "Setup SQL" script, then run it in your Supabase SQL Editor.');
+      } else {
+        alert(`❌ Database Error: ${e.message || 'Unknown error'}\n\nThis usually means the security policies (RLS) were not set up correctly in your SQL Editor.`);
+      }
+    }
   };
 
   const isInWatchlist = (id: number) => watchlist.some(m => m.id === id);
 
-  // Load initial data & URL state
   useEffect(() => {
     const init = async () => {
       try {
@@ -90,7 +150,6 @@ const App: React.FC = () => {
         setMovieGenres(mg);
         setTvGenres(tg);
 
-        // Check URL parameters for direct link
         const params = new URLSearchParams(window.location.search);
         const id = params.get('id');
         const type = params.get('type') as 'movie' | 'tv';
@@ -110,14 +169,12 @@ const App: React.FC = () => {
     };
     init();
 
-    // Handle browser back/forward buttons
     const handlePopState = async () => {
       const params = new URLSearchParams(window.location.search);
       const id = params.get('id');
       const type = params.get('type') as 'movie' | 'tv';
 
       if (id && type) {
-        // Re-open if navigating forward to a state with ID
         if (!selectedMovie || selectedMovie.id !== parseInt(id)) {
           const details = await tmdbService.fetchDetails(parseInt(id), type);
           setSelectedMovie(details);
@@ -132,7 +189,6 @@ const App: React.FC = () => {
           setIsDetailOpen(true);
         }
       } else {
-        // Close if navigating back to home state
         setIsDetailOpen(false);
       }
     };
@@ -141,10 +197,9 @@ const App: React.FC = () => {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Fetch categorized data
   useEffect(() => {
     const refreshData = async () => {
-      if (activeTab === 'watchlist' || (activeTab === 'search' && !searchQuery)) return;
+      if (activeTab === 'watchlist' || activeTab === 'profile' || (activeTab === 'search' && !searchQuery)) return;
       setLoadingMore(true);
       setHasMore(true);
       try {
@@ -167,7 +222,7 @@ const App: React.FC = () => {
   }, [activeTab, selectedGenre]);
 
   const loadMore = async () => {
-    if (loadingMore || activeTab === 'watchlist' || activeTab === 'home') return;
+    if (loadingMore || activeTab === 'watchlist' || activeTab === 'profile' || activeTab === 'home') return;
     setLoadingMore(true);
     try {
       if (activeTab === 'movies') {
@@ -199,8 +254,6 @@ const App: React.FC = () => {
   const openDetails = async (movie: Movie) => {
     try {
       const type = movie.media_type || (movie.name ? 'tv' : 'movie');
-
-      // Update URL without reloading
       const url = new URL(window.location.href);
       url.searchParams.set('id', movie.id.toString());
       url.searchParams.set('type', type);
@@ -219,14 +272,36 @@ const App: React.FC = () => {
     } catch (e) { console.error(e); }
   };
 
-  const startPlayback = (season?: number, episode?: number) => {
+  const startPlayback = (season?: number, episode?: number, item?: Movie) => {
+    const movieToPlay = item || selectedMovie;
+    if (!movieToPlay) return;
+
     if (season !== undefined) setCurrentSeason(season);
     if (episode !== undefined) setCurrentEpisode(episode);
-    const sources = extractorService.getSources(selectedMovie.id, selectedMovie.seasons ? 'tv' : 'movie', season || currentSeason, episode || currentEpisode, selectedMovie.external_ids?.imdb_id);
+
+    const isTV = (movieToPlay as any).seasons || movieToPlay.media_type === 'tv' || (movieToPlay as any).name;
+    const sources = extractorService.getSources(
+      movieToPlay.id,
+      isTV ? 'tv' : 'movie',
+      season || currentSeason,
+      episode || currentEpisode,
+      (movieToPlay as any).external_ids?.imdb_id
+    );
+
     setAllSources(sources);
     setActiveSource(sources[0]);
     setIsPlayerOpen(true);
   };
+
+  useEffect(() => {
+    if (isPlayerOpen && selectedMovie) {
+      const type = selectedMovie.seasons ? 'tv' : 'movie';
+      const sources = extractorService.getSources(selectedMovie.id, type, currentSeason, currentEpisode, selectedMovie.external_ids?.imdb_id);
+      setAllSources(sources);
+      const sameProvider = sources.find(s => s.provider === activeSource?.provider);
+      setActiveSource(sameProvider || sources[0]);
+    }
+  }, [currentEpisode, currentSeason, isPlayerOpen]);
 
   const handleSourceSelect = (source: VideoSource) => {
     setActiveSource(source);
@@ -274,7 +349,15 @@ const App: React.FC = () => {
                     <span className="text-gray-400 font-bold text-sm">★ {trending[0].vote_average.toFixed(1)}</span>
                   </div>
                   <h1 className="text-4xl sm:text-7xl font-black max-w-4xl leading-[0.9] tracking-tighter italic uppercase drop-shadow-2xl">{trending[0].title || trending[0].name}</h1>
-                  <button onClick={() => openDetails(trending[0])} className="w-fit bg-white text-black hover:bg-blue-600 hover:text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl transition-all active:scale-95">Watch Trailer</button>
+                  <button
+                    onClick={() => {
+                      setSelectedMovie(trending[0]);
+                      startPlayback(undefined, undefined, trending[0]);
+                    }}
+                    className="w-fit bg-white text-black hover:bg-blue-600 hover:text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl transition-all active:scale-95"
+                  >
+                    Watch Now
+                  </button>
                 </div>
               </div>
             )}
@@ -358,12 +441,53 @@ const App: React.FC = () => {
             )}
           </div>
         )}
+
+        {activeTab === 'profile' && (
+          <div className="p-6 md:p-10 pt-20">
+            <div className="max-w-4xl mx-auto">
+              <div className="flex flex-col items-center text-center mb-16">
+                <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 p-1 mb-6">
+                  <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden border-4 border-black font-black text-4xl">
+                    {user ? user.email[0].toUpperCase() : '?'}
+                  </div>
+                </div>
+                <h1 className="text-4xl font-black tracking-tighter italic uppercase mb-2">
+                  {user ? user.email.split('@')[0] : 'Guest User'}
+                </h1>
+                <p className="text-xs font-black uppercase tracking-[0.3em] text-gray-500">
+                  {user ? 'Verified Member' : 'Sign in to sync your library'}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {user ? (
+                  <>
+                    <button onClick={() => supabase.auth.signOut()} className="group p-8 bg-white/5 border border-white/10 rounded-[3rem] text-left hover:bg-red-500/10 hover:border-red-500/30 transition-all focus:outline-none">
+                      <span className="block text-[10px] font-black uppercase tracking-widest text-gray-500 group-hover:text-red-500 mb-1">Account Safety</span>
+                      <span className="text-xl font-black italic uppercase">Sign Out</span>
+                    </button>
+                    <div className="p-8 bg-white/5 border border-white/10 rounded-[3rem] flex flex-col justify-center">
+                      <span className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Membership</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                        <span className="text-xl font-black italic uppercase">K-Flix Pro</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <button onClick={() => setIsAuthOpen(true)} className="col-span-1 sm:col-span-2 p-10 bg-blue-600 rounded-[3rem] text-center hover:bg-blue-700 transition-all shadow-2xl shadow-blue-600/20 active:scale-[0.98] focus:outline-none">
+                    <span className="text-2xl font-black italic uppercase text-white">Sign In to K-Flix</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {isDetailOpen && selectedMovie && (
         <div ref={detailScrollRef} className="fixed inset-0 z-[100] overflow-y-auto overflow-x-hidden bg-[#050505] animate-in fade-in slide-in-from-bottom-10 duration-700 no-scrollbar pb-32">
           <div className="w-full min-h-screen relative">
-            {/* Close Button Mobile Optimized */}
             <div className="absolute top-6 left-6 z-[120]">
               <button
                 onClick={() => {
@@ -379,7 +503,6 @@ const App: React.FC = () => {
               </button>
             </div>
 
-            {/* Hero Backdrop - Responsive Height */}
             <div className="absolute top-0 w-full h-[45vh] sm:h-[70vh] overflow-hidden">
               <img src={`${IMAGE_BASE_URL}/original${selectedMovie.backdrop_path}`} className="w-full h-full object-cover opacity-60" />
               <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/40 to-transparent" />
@@ -400,7 +523,6 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* Action Buttons - Stacked on Mobile */}
               <div className="flex flex-col sm:flex-row gap-4">
                 <button onClick={() => startPlayback()} className="flex-1 min-w-[140px] bg-white text-black hover:bg-blue-600 hover:text-white py-5 sm:py-6 rounded-[1.5rem] sm:rounded-[2rem] font-black text-xs sm:text-sm uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 outline-none">
                   <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" /></svg>
@@ -418,7 +540,6 @@ const App: React.FC = () => {
                     <h3 className="text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] text-blue-500/60 italic">Synopsis</h3>
                     <p className="text-gray-400 leading-relaxed text-sm sm:text-lg font-medium max-w-3xl">{selectedMovie.overview}</p>
                   </div>
-
                   {selectedMovie.credits?.cast && (
                     <div className="space-y-4">
                       <h3 className="text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] text-blue-500/60 italic">The Cast</h3>
@@ -435,7 +556,6 @@ const App: React.FC = () => {
                     </div>
                   )}
                 </div>
-
                 <div className="space-y-6 sm:space-y-10">
                   <div className="bg-white/5 border border-white/10 p-6 sm:p-8 rounded-[2rem] sm:rounded-[3rem] space-y-4 sm:space-y-6">
                     <div className="flex items-center justify-between border-b border-white/5 pb-3">
@@ -458,7 +578,6 @@ const App: React.FC = () => {
                   </div>
                 </div>
               </div>
-
               {selectedMovie.seasons && (
                 <div className="mt-8 sm:mt-12 space-y-6 sm:space-y-10">
                   <div className="flex items-center justify-between border-b border-white/10 pb-4 sm:pb-6">
@@ -482,7 +601,6 @@ const App: React.FC = () => {
                       )}
                     </div>
                   </div>
-
                   <div className="flex flex-col gap-3 sm:gap-4">
                     {seasonsData?.map((ep) => (
                       <button key={ep.id} onClick={() => startPlayback(ep.season_number, ep.episode_number)} className="flex flex-col sm:flex-row gap-4 sm:gap-6 p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2.5rem] bg-white/5 hover:bg-blue-600/10 group transition-all text-left border border-white/5 hover:border-blue-500/30 active:scale-[0.99]">
@@ -501,8 +619,6 @@ const App: React.FC = () => {
                   </div>
                 </div>
               )}
-
-              {/* Recommendations Section */}
               {selectedMovie.recommendations?.results?.length > 0 && (
                 <div className="mt-8 sm:mt-12 -mx-6 sm:-mx-8 md:-mx-16">
                   <Row title="You Might Also Like" items={selectedMovie.recommendations.results} onItemClick={openDetails} />
@@ -520,6 +636,8 @@ const App: React.FC = () => {
       {isPlayerOpen && activeSource && (
         <Player initialSource={activeSource} allSources={allSources} title={selectedMovie.title || selectedMovie.name} id={selectedMovie.id} type={selectedMovie.seasons ? 'tv' : 'movie'} episodes={selectedMovie.seasons ? seasonsData : undefined} currentEpisode={selectedMovie.seasons ? currentEpisode : undefined} onEpisodeChange={(ep) => setCurrentEpisode(ep)} onClose={() => setIsPlayerOpen(false)} />
       )}
+
+      {isAuthOpen && <Auth onClose={() => setIsAuthOpen(false)} />}
     </Layout>
   );
 };
