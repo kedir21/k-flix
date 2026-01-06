@@ -3,7 +3,6 @@ export const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 export const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
 
 export const VIDEO_PROVIDERS = [
-
   {
     id: 'vidsrccc',
     name: 'VidSrc.CC',
@@ -12,7 +11,7 @@ export const VIDEO_PROVIDERS = [
   },
   {
     id: 'rive',
-    name: 'Rive',
+    name: 'Rive', 
     movie: (id: number) => `https://rivestream.org/embed?type=movie&id=${id}&autoplay=1&autoPlay=true`,
     tv: (id: number, s: number, e: number) => `https://rivestream.org/embed?type=tv&id=${id}&season=${s}&episode=${e}&autoplay=1&autoPlay=true`,
   },

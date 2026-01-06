@@ -31,6 +31,8 @@ const Player: React.FC<PlayerProps> = ({
   const [activeSource, setActiveSource] = useState<VideoSource | null>(null);
   const [isResolving, setIsResolving] = useState(true);
   const [isSourceDropdownOpen, setIsSourceDropdownOpen] = useState(false);
+  const [showAdStatus, setShowAdStatus] = useState(false);
+  const [showGhostShield, setShowGhostShield] = useState(false);
 
   // Playback State
   const [isPlaying, setIsPlaying] = useState(true);
@@ -78,6 +80,16 @@ const Player: React.FC<PlayerProps> = ({
     setIsResolving(false);
     if (resolved.type === 'm3u8' || resolved.type === 'mp4') {
       setTimeout(() => initNativePlayer(resolved.url), 100);
+    }
+
+    setShowAdStatus(true);
+    setTimeout(() => setShowAdStatus(false), 3000);
+
+    // Enable ghost shield for VidSrc.CC to catch popups while sandbox is off
+    if (source.provider === 'VidSrc.CC') {
+      setShowGhostShield(true);
+    } else {
+      setShowGhostShield(false);
     }
 
     // Fallback: If still resolving after 10s, force stop resolving
@@ -191,13 +203,39 @@ const Player: React.FC<PlayerProps> = ({
               controls={false}
             />
           ) : (
-            <iframe
-              src={activeSource.url}
-              className="w-full h-full border-0 bg-black"
-              allow="autoplay; fullscreen; encrypted-media; picture-in-picture; accelerometer; gyroscope"
-              allowFullScreen
-              referrerPolicy="origin"
-            />
+            <div className="w-full h-full relative">
+              <iframe
+                src={activeSource.url}
+                className="w-full h-full border-0 bg-black"
+                allow="autoplay; fullscreen; encrypted-media; picture-in-picture; accelerometer; gyroscope"
+                allowFullScreen
+                referrerPolicy="origin"
+                sandbox={activeSource.provider === 'VidSrc.CC' ? undefined : "allow-forms allow-pointer-lock allow-same-origin allow-scripts"}
+              />
+
+              {/* Automated Stealth Status */}
+              {showAdStatus && (
+                <div className="absolute top-10 left-1/2 -translate-x-1/2 z-[200] pointer-events-none animate-in fade-in slide-in-from-top-4 duration-1000">
+                  <div className="bg-blue-600/20 backdrop-blur-xl border border-blue-500/30 px-6 py-3 rounded-2xl flex items-center gap-3">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                    <span className="text-white font-black uppercase tracking-[0.2em] text-[10px]">
+                      {activeSource.provider === 'VidSrc.CC' ? 'Ghost Shield Active' : 'Ad-Shield Active'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Ghost Shield: Invisible layer for VidSrc.CC to absorb first click popups */}
+              {showGhostShield && (
+                <div
+                  className="absolute inset-0 z-[150] cursor-pointer bg-transparent"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowGhostShield(false);
+                  }}
+                />
+              )}
+            </div>
           )
         )}
       </div>
