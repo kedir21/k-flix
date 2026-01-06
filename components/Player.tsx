@@ -1,9 +1,5 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Episode, VideoSource } from '../types';
-import { extractorService } from '../services/extractorService';
-
-declare const Hls: any;
 
 interface PlayerProps {
   initialSource: VideoSource;
@@ -22,271 +18,195 @@ const Player: React.FC<PlayerProps> = ({
   allSources = [],
   title,
   onClose,
-  id,
-  type,
-  episodes,
-  currentEpisode,
-  onEpisodeChange
+  // id, type, episodes, currentEpisode, onEpisodeChange are not used in this refactor
 }) => {
-  const [activeSource, setActiveSource] = useState<VideoSource | null>(null);
-  const [isResolving, setIsResolving] = useState(true);
-  const [isSourceDropdownOpen, setIsSourceDropdownOpen] = useState(false);
-  const [showAdStatus, setShowAdStatus] = useState(false);
-  const [showGhostShield, setShowGhostShield] = useState(false);
+  const [activeSource, setActiveSource] = useState<VideoSource>(initialSource);
+  const [isSourceMenuOpen, setIsSourceMenuOpen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
 
-  // Playback State
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
+  // Stealth Shield: Invisible Event Capture
+  // Instead of a visible shield, we use a transparent layer that swallows the *first* interact event
+  // but passes subsequent ones or specific control-intended ones.
+  const [stealthShieldActive, setStealthShieldActive] = useState(true);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const controlsTimerRef = useRef<number | null>(null);
 
-  const handleUserInteraction = () => {
-    // Controls are permanent, no hide timer needed
-  };
-
-  const initNativePlayer = (url: string) => {
-    if (!videoRef.current) return;
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        maxBufferSize: 60 * 1024 * 1024, // 60MB
-        maxBufferLength: 30,
-        enableWorker: true,
-        lowLatencyMode: true,
-      });
-      hls.loadSource(url);
-      hls.attachMedia(videoRef.current);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        videoRef.current?.play().catch(() => setIsPlaying(false));
-      });
-    } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS support (Safari/iOS)
-      videoRef.current.src = url;
-      videoRef.current.load();
-      videoRef.current.play().catch(() => setIsPlaying(false));
-    } else {
-      videoRef.current.src = url;
-      videoRef.current.play().catch(() => setIsPlaying(false));
+  // Provider‑specific base shield duration
+  const getShieldDuration = (provider: string): number => {
+    switch (provider) {
+      case 'VidSrc.CC': return 3000; // 3 s
+      case 'VidKing': return 2000; // 2 s
+      case 'Rive': return 3000; // 3 s (same as VidSrc.CC)
+      default: return 2000;
     }
   };
 
-  const prepareStream = async (source: VideoSource) => {
-    setIsResolving(true);
-    const resolved = await extractorService.resolveToNative(source);
-    setActiveSource(resolved);
-    setIsResolving(false);
-    if (resolved.type === 'm3u8' || resolved.type === 'mp4') {
-      setTimeout(() => initNativePlayer(resolved.url), 100);
-    }
+  // Detect Edge browser
+  const isEdge = typeof navigator !== 'undefined' && /Edg/.test(navigator.userAgent);
 
-    setShowAdStatus(true);
-    setTimeout(() => setShowAdStatus(false), 3000);
-
-    // Enable ghost shield for VidSrc.CC to catch popups while sandbox is off
-    if (source.provider === 'VidSrc.CC') {
-      setShowGhostShield(true);
-    } else {
-      setShowGhostShield(false);
-    }
-
-    // Fallback: If still resolving after 10s, force stop resolving
-    setTimeout(() => setIsResolving(false), 10000);
+  // Edge‑aware stealth duration (adds extra buffer for Edge)
+  const getStealthDuration = (provider: string): number => {
+    const base = getShieldDuration(provider);
+    return isEdge ? base + 2000 : base; // extra 2 s on Edge
   };
 
+  // Auto-hide controls
+  const resetControlsTimer = () => {
+    setShowControls(true);
+    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    controlsTimerRef.current = window.setTimeout(() => {
+      if (!isSourceMenuOpen) setShowControls(false);
+    }, 3000);
+  };
+
+  // Aggressive Popup Blocker
   useEffect(() => {
-    prepareStream(initialSource);
-
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
-      if (e.code === 'ArrowRight') skip(10);
-      if (e.code === 'ArrowLeft') skip(-10);
-      if (e.code === 'Escape') onClose();
+    // 1. Monkey-patch window.open to kill popups
+    const originalOpen = window.open;
+    window.open = function (url, target, features) {
+      console.log('🚫 Popup blocked:', url);
+      return null;
     };
-    window.addEventListener('keydown', handleKey);
 
-    const handleMessage = (event: MessageEvent) => {
-      try {
-        if (typeof event.data === 'string') {
-          const data = JSON.parse(event.data);
-          if (data && data.type === 'PLAYER_EVENT') {
-            console.log("VidKing Player Event:", data.data);
-            // Here we could update state or local storage with progress
-            if (data.data.event === 'timeupdate') {
-              setCurrentTime(data.data.currentTime);
-              setDuration(data.data.duration);
-            }
-            if (data.data.event === 'ended' || data.data.event === 'finish') {
-              handleEnded();
-            }
-          }
-        }
-      } catch (e) {
-        // Ignore non-JSON messages
+    return () => { window.open = originalOpen; };
+  }, []);
+
+  const handleInteraction = (e: React.MouseEvent | React.TouchEvent) => {
+    resetControlsTimer();
+    // If shield is active, the first click is "sacrificed" to clear potential overlays from the provider
+    // We prevent default behavior ONLY if it looks like a malicious popup redirect
+    // BUT we need to let the USER interact with our controls.
+    // Since our controls are z-index > iframe, clicks on OUR controls (back, fullscreen) work fine.
+    // Clicks on the IFRAME might trigger popups.
+
+    if (stealthShieldActive) {
+      // We accept the click to "wake" the iframe but try to stop propagation of popup events
+      // For many providers, the first click IS the ad trigger.
+      // We'll let it hit a transparent "catch" div for 500ms then remove it to allow play.
+
+      // Actually, with stealth mode, we just want it GONE.
+      // We will auto-disable the shield after 500ms of load.
+    }
+  };
+
+  // When source changes, start stealth shield with appropriate duration
+  useEffect(() => {
+    if (!activeSource) return;
+    // Reset shield
+    setStealthShieldActive(true);
+    const duration = getStealthDuration(activeSource.provider);
+    const timer = setTimeout(() => setStealthShieldActive(false), duration);
+    return () => clearTimeout(timer);
+  }, [activeSource]);
+
+  // Change source
+  const changeSource = (source: VideoSource) => {
+    setActiveSource(source);
+    setStealthShieldActive(true); // Re-activate stealth shield on source change
+    setIsSourceMenuOpen(false);
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
       }
     };
-    window.addEventListener('message', handleMessage);
 
-    return () => {
-      window.removeEventListener('keydown', handleKey);
-      window.removeEventListener('message', handleMessage);
-    };
-  }, [initialSource]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
-  const togglePlay = () => {
-    if (videoRef.current) {
-      if (isPlaying) videoRef.current.pause();
-      else videoRef.current.play();
-      setIsPlaying(!isPlaying);
-    }
-  };
-
-  const skip = (seconds: number) => {
-    if (videoRef.current) videoRef.current.currentTime += seconds;
-  };
-
-  const changeVolume = (delta: number) => {
-    const change = delta * 0.1;
-    const newVol = Math.max(0, Math.min(1, volume + change));
-    setVolume(newVol);
-    if (videoRef.current) videoRef.current.volume = newVol;
-  };
-
-  const toggleMute = () => {
-    setIsMuted(!isMuted);
-    if (videoRef.current) videoRef.current.muted = !isMuted;
-  };
-
+  // Fullscreen
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) containerRef.current?.requestFullscreen();
     else document.exitFullscreen();
   };
 
-  const handleEnded = () => {
-    if (type === 'tv' && currentEpisode !== undefined && episodes && currentEpisode < episodes.length) {
-      onEpisodeChange?.(currentEpisode + 1);
-    }
-  };
-
-  const formatTime = (time: number) => {
-    const min = Math.floor(time / 60);
-    const sec = Math.floor(time % 60);
-    return `${min}:${sec.toString().padStart(2, '0')}`;
-  };
-
-  const isNative = activeSource?.type === 'm3u8' || activeSource?.type === 'mp4';
+  // Cleanup timers
+  useEffect(() => {
+    return () => {
+      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    };
+  }, []);
 
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[1000] bg-black flex flex-col items-center justify-center overflow-hidden"
-      onClick={() => {
-        if (isNative) togglePlay();
-      }}
+      className="fixed inset-0 z-[1000] bg-black flex items-center justify-center font-sans"
+      onMouseMove={handleInteraction}
+      onTouchStart={resetControlsTimer}
     >
-      {/* Media Layer */}
-      <div className="w-full h-full relative z-[10]">
-        {!isResolving && activeSource && (
-          isNative ? (
-            <video
-              ref={videoRef}
-              className="w-full h-full"
-              onTimeUpdate={() => setCurrentTime(videoRef.current?.currentTime || 0)}
-              onLoadedMetadata={() => setDuration(videoRef.current?.duration || 0)}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onEnded={handleEnded}
-              autoPlay
-              playsInline
-              controls={false}
-            />
-          ) : (
-            <div className="w-full h-full relative">
-              <iframe
-                src={activeSource.url}
-                className="w-full h-full border-0 bg-black"
-                allow="autoplay; fullscreen; encrypted-media; picture-in-picture; accelerometer; gyroscope"
-                allowFullScreen
-                referrerPolicy="origin"
-                sandbox={activeSource.provider === 'VidSrc.CC' ? undefined : "allow-forms allow-pointer-lock allow-same-origin allow-scripts"}
-              />
-
-              {/* Automated Stealth Status */}
-              {showAdStatus && (
-                <div className="absolute top-10 left-1/2 -translate-x-1/2 z-[200] pointer-events-none animate-in fade-in slide-in-from-top-4 duration-1000">
-                  <div className="bg-blue-600/20 backdrop-blur-xl border border-blue-500/30 px-6 py-3 rounded-2xl flex items-center gap-3">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                    <span className="text-white font-black uppercase tracking-[0.2em] text-[10px]">
-                      {activeSource.provider === 'VidSrc.CC' ? 'Ghost Shield Active' : 'Ad-Shield Active'}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Ghost Shield: Invisible layer for VidSrc.CC to absorb first click popups */}
-              {showGhostShield && (
-                <div
-                  className="absolute inset-0 z-[150] cursor-pointer bg-transparent"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowGhostShield(false);
-                  }}
-                />
-              )}
-            </div>
-          )
-        )}
-      </div>
-
-      {/* Loading State Overlay */}
-      {isResolving && (
-        <div className="absolute inset-0 z-[1100] bg-black flex flex-col items-center justify-center">
-          <div className="w-16 h-16 border-4 border-white/5 border-t-blue-500 rounded-full animate-spin mb-6" />
-          <p className="text-white font-black uppercase tracking-[0.4em] text-xs animate-pulse">Connecting to Mirror...</p>
-        </div>
+      {/* 
+        STEALTH LAYER:
+        Absorbs clicks meant for popup triggers in the first 800ms.
+        Invisible to user. 
+      */}
+      {stealthShieldActive && (
+        <div
+          className="absolute inset-0 z-[50]"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setStealthShieldActive(false);
+            console.log("🛡️ Stealth shield caught early click");
+          }}
+        />
       )}
 
-      {/* Minimalist Controls Overlay - Permanent Back Button Only */}
-      <div className="absolute inset-0 z-[50] flex flex-col justify-between p-6 sm:p-10 pointer-events-none">
-        <div className="flex justify-between items-start pointer-events-none">
-          <div className="flex gap-6 items-center pointer-events-auto">
-            <button onClick={onClose} className="p-4 bg-black/40 hover:bg-white text-white hover:text-black rounded-2xl backdrop-blur-md transition-all border border-white/10 outline-none focus:ring shadow-2xl group">
-              <svg className="w-6 h-6 transition-transform group-hover:-translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-            </button>
-            <div className="relative">
-              <button
-                onClick={() => setIsSourceDropdownOpen(!isSourceDropdownOpen)}
-                className="p-4 bg-black/40 hover:bg-white text-white hover:text-black rounded-2xl backdrop-blur-md transition-all border border-white/10 outline-none focus:ring shadow-2xl flex items-center gap-3 font-black text-[10px] uppercase tracking-widest"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16m-7 6h7" /></svg>
-                Mirror
-              </button>
+      <iframe
+        src={activeSource.url}
+        className="w-full h-full border-0"
+        allow="autoplay *; fullscreen; encrypted-media; picture-in-picture; sound *"
+        allowFullScreen
+        title={title}
+      // NO SANDBOX for max compatibility, relying on window.open patch
+      />
 
-              {isSourceDropdownOpen && (
-                <div className="absolute left-0 top-full mt-4 w-56 bg-black/90 backdrop-blur-3xl border border-white/10 rounded-[2rem] shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300 z-[100] pointer-events-auto">
-                  {allSources.map((source, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        prepareStream(source);
-                        setIsSourceDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-6 py-4 font-black text-[10px] uppercase tracking-widest transition-colors hover:bg-blue-600/20 flex items-center justify-between ${activeSource?.provider === source.provider ? 'text-blue-500' : 'text-gray-400'}`}
-                    >
-                      <span>{source.provider}</span>
-                      {activeSource?.provider === source.provider && <span className="w-1.5 h-1.5 bg-blue-500 rounded-full" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+      {/* Elegant Controls Overlay */}
+      <div
+        className={`absolute inset-0 pointer-events-none transition-opacity duration-500 flex flex-col justify-between p-6 ${showControls ? 'opacity-100' : 'opacity-0'}`}
+        style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.8), transparent 20%, transparent 80%, rgba(0,0,0,0.8))' }}
+      >
+        {/* Top Bar */}
+        <div className="flex items-center justify-between pointer-events-auto">
+          <button onClick={onClose} className="p-3 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-all backdrop-blur-md">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+          </button>
+
+          <h1 className="text-white font-medium text-lg tracking-wide drop-shadow-md hidden sm:block">{title}</h1>
+
+          <div className="relative">
+            <button onClick={() => setIsSourceMenuOpen(!isSourceMenuOpen)} className="p-2 flex items-center gap-2 text-white/80 hover:text-white bg-black/20 hover:bg-black/40 rounded-lg backdrop-blur-md transition-all border border-white/5">
+              <span className="text-xs font-bold uppercase tracking-wider">{activeSource.provider}</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isSourceMenuOpen && (
+              <div className="absolute top-full right-0 mt-2 w-48 bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl z-[100] animate-in fade-in zoom-in-95 duration-200">
+                {allSources.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { changeSource(s); }}
+                    className={`w-full text-left px-4 py-3 text-xs font-medium transition-colors ${activeSource.provider === s.provider ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-white/5'}`}
+                  >
+                    {s.provider}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Bottom Bar */}
+        <div className="flex justify-end pointer-events-auto">
+          <button onClick={toggleFullscreen} className="p-3 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition-all backdrop-blur-md">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+          </button>
+        </div>
       </div>
+
     </div>
   );
 };
