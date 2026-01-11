@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Layout from './components/Layout';
 import Row from './components/Row';
-import Player from './components/Player';
+import MinimalistPlayer from './components/MinimalistPlayer';
 import SourceSelector from './components/SourceSelector';
 import Auth from './components/Auth';
 import { supabase } from './services/supabaseClient';
@@ -11,6 +11,7 @@ import { tmdbService } from './services/tmdbService';
 import { extractorService } from './services/extractorService';
 import { Movie, Episode, VideoSource, Genre, Cast } from './types';
 import { IMAGE_BASE_URL } from './constants';
+import { urlHelper } from './utils/urlHelper';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
@@ -150,16 +151,30 @@ const App: React.FC = () => {
         setMovieGenres(mg);
         setTvGenres(tg);
 
+        // Handle Legacy Query Params
         const params = new URLSearchParams(window.location.search);
-        const id = params.get('id');
-        const type = params.get('type') as 'movie' | 'tv';
+        const legacyId = params.get('id');
+        const legacyType = params.get('type') as 'movie' | 'tv';
 
-        if (id && type) {
-          const details = await tmdbService.fetchDetails(parseInt(id), type);
+        // Handle Deterministic Watch URLs
+        const watchParams = urlHelper.parseWatchUrl();
+
+        if (watchParams) {
+          const details = await tmdbService.fetchDetails(watchParams.id, watchParams.type);
+          setSelectedMovie(details);
+          setIsPlayerOpen(true);
+          if (watchParams.type === 'tv') {
+            const episodes = await tmdbService.fetchSeasons(watchParams.id, watchParams.season || 1);
+            setSeasonsData(episodes || []);
+            setCurrentSeason(watchParams.season || 1);
+            setCurrentEpisode(watchParams.episode || 1);
+          }
+        } else if (legacyId && legacyType) {
+          const details = await tmdbService.fetchDetails(parseInt(legacyId), legacyType);
           setSelectedMovie(details);
           setIsDetailOpen(true);
-          if (type === 'tv') {
-            const episodes = await tmdbService.fetchSeasons(parseInt(id), 1);
+          if (legacyType === 'tv') {
+            const episodes = await tmdbService.fetchSeasons(parseInt(legacyId), 1);
             setSeasonsData(episodes || []);
             setCurrentSeason(1);
             setCurrentEpisode(1);
@@ -170,6 +185,23 @@ const App: React.FC = () => {
     init();
 
     const handlePopState = async () => {
+      const watchParams = urlHelper.parseWatchUrl();
+      if (watchParams) {
+        if (!selectedMovie || selectedMovie.id !== watchParams.id) {
+          const details = await tmdbService.fetchDetails(watchParams.id, watchParams.type);
+          setSelectedMovie(details);
+        }
+        if (watchParams.type === 'tv') {
+          const episodes = await tmdbService.fetchSeasons(watchParams.id, watchParams.season || 1);
+          setSeasonsData(episodes || []);
+          setCurrentSeason(watchParams.season || 1);
+          setCurrentEpisode(watchParams.episode || 1);
+        }
+        setIsPlayerOpen(true);
+        setIsDetailOpen(false);
+        return;
+      }
+
       const params = new URLSearchParams(window.location.search);
       const id = params.get('id');
       const type = params.get('type') as 'movie' | 'tv';
@@ -188,8 +220,10 @@ const App: React.FC = () => {
         } else {
           setIsDetailOpen(true);
         }
+        setIsPlayerOpen(false);
       } else {
         setIsDetailOpen(false);
+        setIsPlayerOpen(false);
       }
     };
 
@@ -280,13 +314,25 @@ const App: React.FC = () => {
     if (episode !== undefined) setCurrentEpisode(episode);
 
     const isTV = (movieToPlay as any).seasons || movieToPlay.media_type === 'tv' || (movieToPlay as any).name;
+    const s = season || currentSeason;
+    const e = episode || currentEpisode;
+
     const sources = extractorService.getSources(
       movieToPlay.id,
       isTV ? 'tv' : 'movie',
-      season || currentSeason,
-      episode || currentEpisode,
+      s,
+      e,
       (movieToPlay as any).external_ids?.imdb_id
     );
+
+    // Update URL to deterministic watch path
+    const watchUrl = urlHelper.constructWatchUrl({
+      type: isTV ? 'tv' : 'movie',
+      id: movieToPlay.id,
+      season: isTV ? s : undefined,
+      episode: isTV ? e : undefined
+    });
+    window.history.pushState({}, '', watchUrl);
 
     setAllSources(sources);
     setActiveSource(sources[0]);
@@ -295,11 +341,23 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (isPlayerOpen && selectedMovie) {
-      const type = selectedMovie.seasons ? 'tv' : 'movie';
+      const isTV = selectedMovie.seasons || selectedMovie.media_type === 'tv' || selectedMovie.name;
+      const type = isTV ? 'tv' : 'movie';
       const sources = extractorService.getSources(selectedMovie.id, type, currentSeason, currentEpisode, selectedMovie.external_ids?.imdb_id);
       setAllSources(sources);
       const sameProvider = sources.find(s => s.provider === activeSource?.provider);
       setActiveSource(sameProvider || sources[0]);
+
+      // Update URL when episode/season changes
+      const watchUrl = urlHelper.constructWatchUrl({
+        type: isTV ? 'tv' : 'movie',
+        id: selectedMovie.id,
+        season: isTV ? currentSeason : undefined,
+        episode: isTV ? currentEpisode : undefined
+      });
+      if (window.location.pathname !== watchUrl) {
+        window.history.replaceState({}, '', watchUrl);
+      }
     }
   }, [currentEpisode, currentSeason, isPlayerOpen]);
 
@@ -634,7 +692,24 @@ const App: React.FC = () => {
       )}
 
       {isPlayerOpen && activeSource && (
-        <Player initialSource={activeSource} allSources={allSources} title={selectedMovie.title || selectedMovie.name} id={selectedMovie.id} type={selectedMovie.seasons ? 'tv' : 'movie'} episodes={selectedMovie.seasons ? seasonsData : undefined} currentEpisode={selectedMovie.seasons ? currentEpisode : undefined} onEpisodeChange={(ep) => setCurrentEpisode(ep)} onClose={() => setIsPlayerOpen(false)} />
+        <MinimalistPlayer
+          src={activeSource.url}
+          title={selectedMovie.title || selectedMovie.name}
+          provider={activeSource.provider}
+          allSources={allSources}
+          onSourceChange={(s) => setActiveSource(s)}
+          episodes={selectedMovie.seasons ? seasonsData : undefined}
+          currentEpisode={selectedMovie.seasons ? currentEpisode : undefined}
+          onEpisodeChange={(ep) => setCurrentEpisode(ep)}
+          onClose={() => {
+            setIsPlayerOpen(false);
+            urlHelper.clearWatchUrl();
+          }}
+          contentId={selectedMovie.id}
+          season={selectedMovie.seasons ? currentSeason : undefined}
+          mediaType={selectedMovie.seasons ? 'tv' : 'movie'}
+        />
+
       )}
 
       {isAuthOpen && <Auth onClose={() => setIsAuthOpen(false)} />}
